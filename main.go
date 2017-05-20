@@ -4,22 +4,24 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"github.com/pugnascotia/cron"
+	"os/signal"
+	"syscall"
+
+	"github.com/robfig/cron"
 )
 
 func main() {
-
-	// args exluding program name
-	args := os.Args[1:]
-
-	if len(args) < 2 {
-		log.Fatalln("Usage: mantra cron_spec cmd [ args ... ]")
+	if len(os.Args) < 3 {
+		log.Fatalf("Usage: %s cron_spec cmd [ args ... ]\n", os.Args[0])
 	}
 
+	args := os.Args[1:]
+	spec := args[0]
 	program := args[1]
 	programArgs := args[2:]
 
-	err := cron.Run(args[0], func() {
+	c := cron.New()
+	err := c.AddFunc(spec, func() {
 		cmd := exec.Command(program, programArgs...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -29,7 +31,17 @@ func main() {
 		}
 	})
 
-	if (err != nil) {
-		log.Fatalln("Failed to run, exiting...")
+	if err != nil {
+		log.Fatalln("failed to add func")
+	}
+
+	c.Start()
+
+	sig := make(chan os.Signal)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	select {
+	case <-sig:
+		log.Print("received signal, shutting down...")
+		c.Stop()
 	}
 }
